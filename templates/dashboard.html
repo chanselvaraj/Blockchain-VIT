@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mini Bitcoin Dashboard</title>
+<style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+    h2 { margin-top: 30px; }
+    input, button { padding: 5px; margin: 5px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 5px; text-align: left; }
+    th { background: #eee; }
+    .section { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 1px 1px 5px rgba(0,0,0,0.1);}
+</style>
+</head>
+<body>
+
+<h1>Mini Bitcoin Dashboard</h1>
+
+<div class="section">
+    <h2>Create Wallet</h2>
+    <input type="text" id="walletName" placeholder="Wallet Name">
+    <button onclick="createWallet()">Create Wallet</button>
+</div>
+
+<div class="section">
+    <h2>Wallets & Balances</h2>
+    <button onclick="loadWallets()">Refresh Wallets</button>
+    <table id="walletTable">
+        <thead><tr><th>Name</th><th>Address</th><th>Balance</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<div class="section">
+    <h2>New Transaction</h2>
+    <input type="text" id="txFrom" placeholder="Sender Address">
+    <input type="text" id="txTo" placeholder="Receiver Address">
+    <input type="number" id="txAmount" placeholder="Amount">
+    <button onclick="sendTx()">Send Transaction</button>
+</div>
+
+<div class="section">
+    <h2>Mempool</h2>
+    <button onclick="loadMempool()">Refresh Mempool</button>
+    <table id="mempoolTable">
+        <thead><tr><th>TxID</th><th>From</th><th>To</th><th>Amount</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<div class="section">
+    <h2>Mine Block</h2>
+    <input type="text" id="minerAddress" placeholder="Miner Address">
+    <button onclick="mineBlock()">Mine Block</button>
+</div>
+
+<div class="section">
+    <h2>Blockchain</h2>
+    <button onclick="loadChain()">Refresh Blockchain</button>
+    <table id="chainTable">
+        <thead><tr><th>Index</th><th>Hash</th><th>Previous Hash</th><th>Transactions</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+// ----------------- Wallet -----------------
+async function createWallet() {
+    const name = document.getElementById('walletName').value;
+    if(!name) return alert("Enter wallet name");
+    const res = await fetch("/wallet/create", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name})
+    });
+    const data = await res.json();
+    alert("Wallet created! Address: " + data.address);
+    loadWallets();
+}
+
+async function loadWallets() {
+    const res = await fetch("/wallets");
+    const data = await res.json();
+    const tbody = document.querySelector("#walletTable tbody");
+    tbody.innerHTML = "";
+    for (let key in data) {
+        const w = data[key];
+        const balRes = await fetch("/balance/" + w.address);
+        const balData = await balRes.json();
+        const row = `<tr><td>${w.name}</td><td>${w.address}</td><td>${balData.balance}</td></tr>`;
+        tbody.innerHTML += row;
+    }
+}
+
+// ----------------- Transaction -----------------
+async function sendTx() {
+    const sender = document.getElementById("txFrom").value;
+    const receiver = document.getElementById("txTo").value;
+    const amount = parseInt(document.getElementById("txAmount").value);
+    if(!sender || !receiver || !amount) return alert("Fill all fields");
+
+    const res = await fetch("/tx/new", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({from: sender, to: receiver, amount})
+    });
+    const data = await res.json();
+    if(data.error) return alert("Error: " + data.error);
+    alert("Transaction created: " + data.txid);
+    loadMempool();
+}
+
+// ----------------- Mempool -----------------
+async function loadMempool() {
+    const res = await fetch("/mempool");
+    const data = await res.json();
+    const tbody = document.querySelector("#mempoolTable tbody");
+    tbody.innerHTML = "";
+    data.forEach(tx => {
+        const from = tx.inputs.length > 0 ? tx.inputs[0].txid : "coinbase";
+        const to = tx.outputs[0].address;
+        const amount = tx.outputs[0].amount;
+        const row = `<tr><td>${tx.txid}</td><td>${from}</td><td>${to}</td><td>${amount}</td></tr>`;
+        tbody.innerHTML += row;
+    });
+}
+
+// ----------------- Mining -----------------
+async function mineBlock() {
+    const miner = document.getElementById("minerAddress").value;
+    if(!miner) return alert("Enter miner address");
+    const res = await fetch("/mine", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({miner})
+    });
+    const block = await res.json();
+    alert("Block mined! Hash: " + block.hash);
+    loadWallets();
+    loadChain();
+    loadMempool();
+}
+
+// ----------------- Blockchain -----------------
+async function loadChain() {
+    const res = await fetch("/chain");
+    const data = await res.json();
+    const tbody = document.querySelector("#chainTable tbody");
+    tbody.innerHTML = "";
+    data.chain.forEach(block => {
+        const txs = block.transactions.map(t => t.txid).join(", ");
+        const row = `<tr><td>${block.index}</td><td>${block.hash}</td><td>${block.previous_hash}</td><td>${txs}</td></tr>`;
+        tbody.innerHTML += row;
+    });
+}
+
+// Initial load
+loadWallets();
+loadMempool();
+loadChain();
+</script>
+
+</body>
+</html>
