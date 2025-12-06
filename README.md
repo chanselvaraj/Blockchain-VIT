@@ -1,4 +1,4 @@
-# **Mini Bitcoin: Simplified Blockchain Implementation**
+# **VIT Demo: Simplified Blockchain Implementation**
 
 A **Python-based mini Bitcoin-like blockchain** project demonstrating key blockchain concepts including **wallets, transactions, UTXOs, mining, proof-of-work, and a P2P network**, with a **browser-based dashboard** for visualization.
 
