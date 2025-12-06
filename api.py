@@ -4,7 +4,7 @@ from blockchain import Blockchain
 app = Flask(__name__)
 
 # Initialize blockchain
-bc = Blockchain(difficulty=3, coinbase_amount=50)
+bc = Blockchain(difficulty=3, coinbase_amount=1,genesis_amount=100)
 
 # ------------------------
 # Wallet endpoints

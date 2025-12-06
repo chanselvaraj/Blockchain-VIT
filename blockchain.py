@@ -2,6 +2,8 @@ import hashlib
 import json
 import time
 import uuid
+from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
+import base64
 
 # ------------------------
 # Wallet and UTXO system
@@ -10,10 +12,25 @@ import uuid
 class Wallet:
     def __init__(self, name=None):
         self.name = name or str(uuid.uuid4())[:8]
-        self.address = str(uuid.uuid4().hex[:16])  # unique address
+        self.sk = SigningKey.generate(curve=SECP256k1)  # private key
+        self.vk = self.sk.verifying_key                  # public key
+        self.address = hashlib.sha256(self.vk.to_string()).hexdigest()
+
+    def sign(self, message: bytes) -> str:
+        sig = self.sk.sign(message)
+        return base64.b64encode(sig).decode()
 
     def to_dict(self):
         return {"name": self.name, "address": self.address}
+
+    @staticmethod
+    def verify(pubkey_bytes: bytes, message: bytes, signature_b64: str) -> bool:
+        try:
+            vk = VerifyingKey.from_string(pubkey_bytes, curve=SECP256k1)
+            sig = base64.b64decode(signature_b64)
+            return vk.verify(sig, message)
+        except (BadSignatureError, Exception):
+            return False
 
 
 class TxInput:
@@ -39,6 +56,20 @@ class Transaction:
         self.inputs = inputs
         self.outputs = outputs
         self.txid = str(uuid.uuid4().hex)
+        self.sig = None     # signature of sender
+        self.pubkey = None  # sender public key
+
+    def sign(self, wallet: Wallet):
+        message = self.txid.encode()
+        self.sig = wallet.sign(message)
+        self.pubkey = wallet.vk.to_string().hex()
+
+    def verify_signature(self) -> bool:
+        if not self.sig or not self.pubkey:
+            return False
+        message = self.txid.encode()
+        pub_bytes = bytes.fromhex(self.pubkey)
+        return Wallet.verify(pub_bytes, message, self.sig)
 
     def to_dict(self):
         return {
@@ -140,6 +171,11 @@ class Blockchain:
         if change > 0:
             outputs.append(TxOutput(change, sender_addr))
         tx = Transaction([TxInput(u["txid"], u["index"]) for u in spent], outputs)
+        # Sign transaction with sender's private key
+        sender_wallet = next((w for w in self.wallets.values() if w.address == sender_addr), None)
+        if sender_wallet:
+            tx.sign(sender_wallet)
+
         self.mempool.append(tx)
         return tx.to_dict()
 
@@ -172,6 +208,8 @@ class Blockchain:
         self.chain.append(block)
         # Update UTXO
         for tx in txs:
+            if tx.inputs and not tx.verify_signature():
+                raise Exception("Invalid transaction signature")
             self.add_utxos(tx)
         self.mempool.clear()
         return block.to_dict()
